@@ -46,7 +46,7 @@ A **Terminal‑based file explorer** built with [Textual](https://github.com/Tex
 ---
 
 
-**Key-Bind CheatSheet**
+## Key-Bind CheatSheet
 ```
 '/'          "Search Files"
 'esc'        "Go Home"
@@ -75,3 +75,35 @@ More info on UV: https://docs.astral.sh/uv/getting-started/installation/
     ```
     uv run app.py 
     ```
+
+
+## Installation with venv
+1. **Clone this repo**  
+   ```bash 
+   git clone https://github.com/Squeeshalami/cli-file-explorer.git
+   cd cli-file-explorer
+   ```
+
+2. **Create and activate a virtual environment**
+   ```bash
+   python -m venv venv
+
+   # On Windows
+   venv\Scripts\activate
+
+   # On macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   
+   # Or install directly from pyproject.toml
+   pip install .
+   ```
+
+4. **Run the App**
+   ```bash
+   python app.py
+   ```
