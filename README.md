@@ -31,9 +31,6 @@ A **Terminal‑based file explorer** built with [Textual](https://github.com/Tex
 - **Hidden Files Toggle** (`h`)  
   Show or hide all dot‑files and dot‑folders in the tree.
 
-- **Go Home** (`Esc`)  
-  Reset the tree back to your home directory and clear the preview.
-
 - **Preview Resizing** (`+` / `=` to enlarge, `-` / `_` to shrink)  
   Dynamically adjust the maximum dimensions used when rendering images, video thumbnails, and ASCII previews.
 

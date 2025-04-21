@@ -10,4 +10,5 @@ dependencies = [
     "rich-pixels>=3.0.1",
     "fuzzywuzzy>=0.18.0",
     "python-levenshtein>=0.27.1",
+    "pdfminer-six>=20250416",
 ]

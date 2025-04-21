@@ -1,5 +1,3 @@
-# app.py
-
 from pathlib import Path
 import threading
 
@@ -14,76 +12,29 @@ from rich.syntax import Syntax
 from tools.audio_player import AudioPlayer
 from tools.image_previewer import ImagePreviewer
 from tools.video_thumbnail import VideoThumbnailer
+from tools.pdf_previewer import PDFPreviewer            
 from tools.fuzzy_search import FuzzySearchScreen
-from tools.utils import LANGUAGE_MAP
-class HideableDirectoryTree(DirectoryTree):
-    show_hidden: reactive[bool] = reactive(False)
+from utils import LANGUAGE_MAP, register_custom_themes
+from themes import *
 
-    def filter_paths(self, paths, /):
-        if self.show_hidden:
-            return paths
-        return [p for p in paths if not p.name.startswith(".")]
 
-class RenameScreen(Screen):
-    BINDINGS = [
-        ("escape", "app.pop_screen", "Cancel"),
-        ("enter",  "confirm",        "Rename"),
-    ]
+from widgets import HideableDirectoryTree
+from screens import RenameScreen, MoveScreen, DeleteConfirmScreen
 
-    def compose(self) -> ComposeResult:
-        yield Static("✏️  Rename File", classes="header")
-        yield Input(placeholder="New filename", id="new_name")
-        yield Button("Rename", id="do_rename")
 
-    async def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "do_rename":
-            new_name = self.query_one("#new_name", Input).value.strip()
-            await self.app.rename_file(new_name)
-            await self.app.pop_screen()
+DEFAULT_THEME = dark_matter # CHANGE THIS TO CHANGE DEFAULT THEME
 
-class MoveScreen(Screen):
-    BINDINGS = [
-        ("escape", "app.pop_screen", "Cancel"),
-        ("enter",  "confirm",        "Move"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Static("📂  Move File", classes="header")
-        yield Input(placeholder="Destination folder", id="dest_folder")
-        yield Button("Move", id="do_move")
-
-    async def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "do_move":
-            dest = self.query_one("#dest_folder", Input).value.strip()
-            await self.app.move_file(dest)
-            await self.app.pop_screen()
-
-class DeleteConfirmScreen(Screen):
-    BINDINGS = [("escape", "app.pop_screen", "Cancel")]
-
-    def compose(self) -> ComposeResult:
-        file = self.app.file_to_delete
-        name = file.name if file else ""
-        yield Static("⚠️  Confirm Delete", classes="header")
-        yield Static(f"Delete {name}?", id="file_name")
-        with Horizontal(id="confirm_actions"):
-            yield Button("Yes", id="confirm_yes")
-            yield Button("No",  id="confirm_no")
-
-    async def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "confirm_yes":
-            await self.app.delete_file_confirmed()
-        await self.app.pop_screen()
 
 class FileExplorer(App):
     CSS = """
     DirectoryTree, HideableDirectoryTree {
-      width: 40%;
+      width: 35%;
       border: round #666;
     }
 
     #preview_panel {
-      width: 60%;
+      width: 70%;
+      height: 100%;
       border: round #444;
       padding: 1;
       layout: vertical;
@@ -96,7 +47,7 @@ class FileExplorer(App):
       content-align: center middle;
     }
     #preview_actions > Button {
-      padding: 0 2;
+      padding: 0 5;
       margin: 0 1;
       content-align: center middle;
       border: none;
@@ -104,7 +55,7 @@ class FileExplorer(App):
 
     /* scrollable area under buttons */
     #preview_scroll {
-      height: 1fr;
+      height: 90%;
       overflow-y: auto;
     }
 
@@ -127,14 +78,14 @@ class FileExplorer(App):
     }
 
     BINDINGS = [
-        ("p",      "play_audio",    "Play/Stop Audio"),
-        ("/",      "push_search",   "Search Files"),
-        ("escape","reset_root",     "Go Home"),
-        ("h",      "toggle_hidden", "Show/Hide Hidden"),
-        ("+",      "increase_size", "Increase Preview Size"),
-        ("-",      "decrease_size", "Decrease Preview Size"),
-        ("=",      "increase_size", "Increase Preview Size"),
-        ("_",      "decrease_size", "Decrease Preview Size"),
+        ("p",       "play_audio",    "Play/Stop Audio"),
+        ("/",       "push_search",   "Search Files"),
+        ("escape",  "reset_root",    "Go Home"),
+        ("h",       "toggle_hidden", "Show/Hide Hidden"),
+        ("+",       "increase_size", "Increase Preview Size"),
+        ("-",       "decrease_size", "Decrease Preview Size"),
+        ("=",       "increase_size", "Increase Preview Size"),
+        ("_",       "decrease_size", "Decrease Preview Size"),
     ]
 
     preview_width   = reactive(100, recompose=False, init=False)
@@ -144,16 +95,25 @@ class FileExplorer(App):
     MIN_WIDTH       = 20
     MIN_HEIGHT      = 10
 
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.current_file:   Path | None = None
         self.file_to_delete: Path | None = None
         self.player = AudioPlayer()
-        self.previewer = ImagePreviewer(max_width=self.preview_width, max_height=self.preview_height)
-        self.video_preview = VideoThumbnailer(max_width=self.preview_width, max_height=self.preview_height)
+        self.previewer = ImagePreviewer(max_width=self.preview_width,
+                                        max_height=self.preview_height)
+        self.video_preview = VideoThumbnailer(max_width=self.preview_width,
+                                              max_height=self.preview_height)
+        self.pdf_preview = PDFPreviewer(max_pages=1, max_chars=8000)  # PDF previewer
         self.last_played:   Path | None = None
         self.LANGUAGE_MAP = LANGUAGE_MAP
+
+    def on_mount(self) -> None:
+        # register themes
+        register_custom_themes(self)
+        # set default theme
+        self.theme = DEFAULT_THEME.name
+
     def watch_preview_width(self, new_width: int) -> None:
         self.previewer.max_width = new_width
         self.video_preview.max_width = new_width
@@ -169,18 +129,22 @@ class FileExplorer(App):
         self.preview_height += self.SIZE_STEP_HEIGHT
 
     def action_decrease_size(self) -> None:
-        self.preview_width  = max(self.MIN_WIDTH,  self.preview_width  - self.SIZE_STEP_WIDTH)
-        self.preview_height = max(self.MIN_HEIGHT, self.preview_height - self.SIZE_STEP_HEIGHT)
+        self.preview_width  = max(self.MIN_WIDTH,
+                                  self.preview_width  - self.SIZE_STEP_WIDTH)
+        self.preview_height = max(self.MIN_HEIGHT,
+                                  self.preview_height - self.SIZE_STEP_HEIGHT)
 
     async def action_push_search(self) -> None:
         await self.push_screen("fuzzy_search")
 
     def action_play_audio(self) -> None:
         preview = self.query_one("#preview", Static)
-        if not self.current_file or self.current_file.suffix.lower() not in ('.mp3','.wav','.flac','.ogg'):
+        if (not self.current_file
+            or self.current_file.suffix.lower() not in ('.mp3','.wav','.flac','.ogg')):
             preview.update("No audio file selected or unsupported format.")
             return
-        if self.player.process and self.player.process.poll() is None and self.last_played == self.current_file:
+        if (self.player.process and self.player.process.poll() is None
+            and self.last_played == self.current_file):
             self.player.process.terminate()
             preview.update(f"Stopped: {self.current_file.name}")
             self.last_played = None
@@ -212,6 +176,12 @@ class FileExplorer(App):
             except:
                 preview.update(self.video_preview.ascii_preview(str(self.current_file)))
 
+        elif ext == '.pdf':
+            try:
+                preview.update(self.pdf_preview.rich_preview(str(self.current_file)))
+            except:
+                preview.update(self.pdf_preview.text_preview(str(self.current_file)))
+
         elif ext in self.LANGUAGE_MAP:
             try:
                 code = self.current_file.read_text(encoding="utf-8")
@@ -239,13 +209,12 @@ class FileExplorer(App):
                 # scrollable region below
                 with Vertical(id="preview_scroll"):
                     yield Static("Select a file to preview its contents", id="preview")
-                
+
                 # buttons at top
                 with Horizontal(id="preview_actions"):
                     yield Button("Rename", id="rename_btn")
                     yield Button("Move",   id="move_btn")
                     yield Button("Delete", id="delete_btn")
-
 
         yield Footer()
 
@@ -279,7 +248,7 @@ class FileExplorer(App):
         await tree.reload()
         preview.update("Deleted. Select a file to preview its contents.")
 
-    def on_directory_tree_file_selected(self, event) -> None:
+    def on_directory_tree_file_selected(self, event: Button.Pressed) -> None:
         self.current_file = Path(event.path)
         self._refresh_preview()
 
