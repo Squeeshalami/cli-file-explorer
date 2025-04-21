@@ -2,6 +2,7 @@
 ### replace /PATH/TO/ssh-file-explorer with the path to the ssh-file-explorer directory
 ### requires uv to be installed
 
+
 #!/bin/bash
 PROJECT_DIR="/PATH/TO/ssh-file-explorer"
 cd "$PROJECT_DIR" || exit 1 # Exit if cd fails

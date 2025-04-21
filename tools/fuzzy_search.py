@@ -1,4 +1,3 @@
-# fuzzy_search.py
 import os
 from fuzzywuzzy import fuzz
 from textual.screen import Screen
