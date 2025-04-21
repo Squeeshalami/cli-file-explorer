@@ -1,8 +1,0 @@
-"/",      "Search Files"
-"escape" "Go Home"
-"h",      "Show/Hide Hidden"
-"p",      "Play/Stop Audio"
-"+, =",   "Increase Preview Size"
-"-, _",   "Decrease Preview Size"
-"=",      "Increase Preview Size"
-"_",      "Decrease Preview Size"
