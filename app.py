@@ -9,6 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 
 from rich.syntax import Syntax
+from rich.text import Text
 
 from tools.audio_player import AudioPlayer
 from tools.image_previewer import ImagePreviewer
@@ -271,7 +272,7 @@ class FileExplorer(App):
             elif path.is_dir():
                 path.rmdir()
         except Exception as e:
-            preview.update(f"[red]Failed to delete {path.name}: {e}[/]")
+            preview.update(Text(f"Failed to delete {path.name}: {e}", style="red"))
             return
 
         self.current_file   = None
