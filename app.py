@@ -19,13 +19,7 @@ from utils import LANGUAGE_MAP, register_custom_themes
 from themes import *
 
 from widgets import HideableDirectoryTree
-from screens import (
-    RenameScreen,
-    MoveScreen,
-    DeleteConfirmScreen,
-    NewFolderScreen,
-    CopyScreen,
-)
+from screens import RenameScreen, MoveScreen, DeleteConfirmScreen, NewFolderScreen, CopyScreen
 
 DEFAULT_THEME = ember
 
@@ -113,14 +107,10 @@ class FileExplorer(App):
         self.file_to_delete: Path | None = None
 
         self.player = AudioPlayer()
-        self.previewer = ImagePreviewer(
-            max_width=self.preview_width,
-            max_height=self.preview_height
-        )
-        self.video_preview = VideoThumbnailer(
-            max_width=self.preview_width,
-            max_height=self.preview_height
-        )
+        self.previewer = ImagePreviewer(max_width=self.preview_width,
+                                        max_height=self.preview_height)
+        self.video_preview = VideoThumbnailer(max_width=self.preview_width,
+                                              max_height=self.preview_height)
         self.pdf_preview = PDFPreviewer(max_pages=1, max_chars=8000)
         self.last_played:   Path | None = None
         self.LANGUAGE_MAP = LANGUAGE_MAP
@@ -129,6 +119,24 @@ class FileExplorer(App):
         register_custom_themes(self)
         self.theme = DEFAULT_THEME.name
 
+    def on_directory_tree_node_highlighted(
+        self,
+        event: DirectoryTree.NodeHighlighted
+    ) -> None:
+        """Auto-refresh preview as user navigates the tree."""
+        raw = event.node.data or event.node.id
+        path = Path(raw)
+
+        if path.is_file():
+            self.current_file = path
+            self.current_dir  = path.parent
+            self._refresh_preview()
+        else:
+            self.current_file = None
+            self.current_dir  = path
+            self.query_one("#preview", Static).update(
+                f"[bold]Directory:[/] {path}"
+            )
 
     def watch_preview_width(self, new_width: int) -> None:
         self.previewer.max_width = new_width
@@ -145,14 +153,10 @@ class FileExplorer(App):
         self.preview_height += self.SIZE_STEP_HEIGHT
 
     def action_decrease_size(self) -> None:
-        self.preview_width  = max(
-            self.MIN_WIDTH,
-            self.preview_width  - self.SIZE_STEP_WIDTH
-        )
-        self.preview_height = max(
-            self.MIN_HEIGHT,
-            self.preview_height - self.SIZE_STEP_HEIGHT
-        )
+        self.preview_width  = max(self.MIN_WIDTH,
+                                  self.preview_width  - self.SIZE_STEP_WIDTH)
+        self.preview_height = max(self.MIN_HEIGHT,
+                                  self.preview_height - self.SIZE_STEP_HEIGHT)
 
     async def action_push_search(self) -> None:
         await self.push_screen("fuzzy_search")
@@ -163,10 +167,8 @@ class FileExplorer(App):
             or self.current_file.suffix.lower() not in ('.mp3','.wav','.flac','.ogg')):
             preview.update("No audio file selected or unsupported format.")
             return
-
-        if (self.player.process and
-            self.player.process.poll() is None and
-            self.last_played == self.current_file):
+        if (self.player.process and self.player.process.poll() is None
+            and self.last_played == self.current_file):
             self.player.process.terminate()
             preview.update(f"Stopped: {self.current_file.name}")
             self.last_played = None
@@ -177,9 +179,7 @@ class FileExplorer(App):
                 args=(str(self.current_file),),
                 daemon=True
             ).start()
-            preview.update(
-                f"Playing: {self.current_file.name}\nPress 'p' again to stop."
-            )
+            preview.update(f"Playing: {self.current_file.name}\nPress 'p' again to stop.")
 
     def _refresh_preview(self) -> None:
         if not self.current_file or not self.current_file.is_file():
@@ -190,42 +190,26 @@ class FileExplorer(App):
 
         if ext in ('.png','.jpg','.jpeg','.bmp','.gif'):
             try:
-                preview.update(
-                    self.previewer.rich_preview(str(self.current_file))
-                )
+                preview.update(self.previewer.rich_preview(str(self.current_file)))
             except:
-                preview.update(
-                    self.previewer.ascii_preview(str(self.current_file))
-                )
+                preview.update(self.previewer.ascii_preview(str(self.current_file)))
 
         elif ext in ('.mp4','.mov','.mkv','.avi','.webm'):
             try:
-                preview.update(
-                    self.video_preview.rich_preview(str(self.current_file))
-                )
+                preview.update(self.video_preview.rich_preview(str(self.current_file)))
             except:
-                preview.update(
-                    self.video_preview.ascii_preview(str(self.current_file))
-                )
+                preview.update(self.video_preview.ascii_preview(str(self.current_file)))
 
         elif ext == '.pdf':
             try:
-                preview.update(
-                    self.pdf_preview.rich_preview(str(self.current_file))
-                )
+                preview.update(self.pdf_preview.rich_preview(str(self.current_file)))
             except:
-                preview.update(
-                    self.pdf_preview.text_preview(str(self.current_file))
-                )
+                preview.update(self.pdf_preview.text_preview(str(self.current_file)))
 
         elif ext in self.LANGUAGE_MAP:
             try:
                 code = self.current_file.read_text(encoding="utf-8")
-                syntax = Syntax(
-                    code,
-                    self.LANGUAGE_MAP[ext],
-                    line_numbers=True
-                )
+                syntax = Syntax(code, self.LANGUAGE_MAP[ext], line_numbers=True)
                 preview.update(syntax)
             except:
                 preview.update("No Preview Available")
@@ -238,21 +222,14 @@ class FileExplorer(App):
                 preview.update("No Preview Available")
 
     def compose(self) -> ComposeResult:
-        yield Header(
-            show_clock=True,
-            time_format="%I:%M %p",
-            name="File Explorer"
-        )
+        yield Header(show_clock=True, time_format="%I:%M %p", name="File Explorer")
 
         with Horizontal():
             yield HideableDirectoryTree(Path.home(), id="tree")
 
             with Vertical(id="preview_panel"):
                 with Vertical(id="preview_scroll"):
-                    yield Static(
-                        "Select a file to preview its contents",
-                        id="preview"
-                    )
+                    yield Static("Select a file to preview its contents", id="preview")
                 with Horizontal(id="preview_actions"):
                     yield Button("Rename",   id="rename_btn")
                     yield Button("Move",     id="move_btn")
@@ -292,7 +269,7 @@ class FileExplorer(App):
             if path.is_file():
                 path.unlink()
             elif path.is_dir():
-                shutil.rmtree(path) # Use shutil.rmtree for directories
+                path.rmdir()
         except Exception as e:
             preview.update(f"[red]Failed to delete {path.name}: {e}[/]")
             return
@@ -350,41 +327,19 @@ class FileExplorer(App):
     async def move_file(self, dest_str: str) -> None:
         dest = Path(dest_str).expanduser()
         preview = self.query_one("#preview", Static)
-
-        # Determine the item to move (file or directory)
-        item_to_move = self.current_file if self.current_file else self.current_dir
-        if not item_to_move:
-             preview.update(f"[red]No item selected to move.[/]")
-             return
-
         if not dest.is_dir():
             preview.update(f"[red]Destination not a directory: {dest}[/]")
             return
-
-        new_path = dest / item_to_move.name
         try:
-            shutil.move(str(item_to_move), str(new_path))
+            shutil.move(str(self.current_file), str(dest / self.current_file.name))
         except Exception as e:
             preview.update(f"[red]Move failed: {e}[/]")
             return
-
-        # Update state based on whether a file or directory was moved
-        if self.current_file:
-            self.current_file = new_path
-            self.current_dir = new_path.parent
-        else: # Moved a directory
-            self.current_file = None
-            self.current_dir = new_path # Update current_dir to the new location
-
+        self.current_file = dest / self.current_file.name
+        self.current_dir  = dest
         tree = self.query_one("#tree", HideableDirectoryTree)
-        await tree.reload() # Reload the tree to reflect the move
-
-        # Refresh preview or update directory display
-        if self.current_file:
-            self._refresh_preview()
-        else:
-             preview.update(f"[bold]Moved directory to:[/] {new_path}")
-
+        await tree.reload()
+        self._refresh_preview()
 
     ## Copy File ##
     async def action_copy(self) -> None:
@@ -393,10 +348,8 @@ class FileExplorer(App):
     async def copy_file(self, dest_str: str) -> None:
         preview = self.query_one("#preview", Static)
 
-        # Determine the item to copy (file or directory)
-        item_to_copy = self.current_file if self.current_file else self.current_dir
-        if not item_to_copy:
-            preview.update("[red]No item selected to copy.[/]")
+        if not self.current_file:
+            preview.update("[red]No file selected to copy.[/]")
             return
 
         dest_path = Path(dest_str)
@@ -408,12 +361,9 @@ class FileExplorer(App):
             preview.update(f"[red]Destination not a directory: {dest}[/]")
             return
 
-        new_path = dest / item_to_copy.name
+        new_path = dest / self.current_file.name
         try:
-            if item_to_copy.is_file():
-                shutil.copy2(str(item_to_copy), str(new_path))
-            elif item_to_copy.is_dir():
-                shutil.copytree(str(item_to_copy), str(new_path), dirs_exist_ok=True) # Use copytree for directories
+            shutil.copy2(str(self.current_file), str(new_path))
         except Exception as e:
             preview.update(f"[red]Copy failed: {e}[/]")
             return
@@ -423,12 +373,12 @@ class FileExplorer(App):
         preview.update(f"[green]Copied to:[/] {new_path}")
 
     ## File / Directory Selection ##
-    def on_hideable_directory_tree_file_selected(self, event: HideableDirectoryTree.FileSelected) -> None:
+    def on_directory_tree_file_selected(self, event) -> None:
         self.current_file = Path(event.path)
         self.current_dir  = self.current_file.parent
         self._refresh_preview()
 
-    def on_hideable_directory_tree_directory_selected(self, event: HideableDirectoryTree.DirectorySelected) -> None:
+    def on_directory_tree_directory_selected(self, event) -> None:
         self.current_file = None
         self.current_dir  = Path(event.path)
         self.query_one("#preview", Static).update(f"[bold]Directory:[/] {self.current_dir}")
@@ -451,41 +401,19 @@ class FileExplorer(App):
 
     ## Jump to Path ##
     async def jump_to_path(self, path_str: str) -> None:
-        target_path = Path(path_str).expanduser() # Expand user path
-
+        target_path = Path(path_str)
         if target_path.is_file():
-            # Target is a file
             self.current_file = target_path
             self.current_dir  = target_path.parent
             self._refresh_preview()
-
             try:
                 tree = self.query_one(HideableDirectoryTree)
-                tree.path = target_path.parent # Set tree root to parent dir
+                tree.path = target_path.parent
                 await tree.reload()
-                # Optionally, select the file node in the tree (if supported)
-                # await tree.select_node_by_path(target_path)
             except Exception as e:
                 self.query_one("#preview", Static).update(f"[red]Error navigating tree: {e}[/]")
-
-        elif target_path.is_dir():
-            # Target is a directory
-             self.current_file = None
-             self.current_dir = target_path
-             self.query_one("#preview", Static).update(f"[bold]Directory:[/] {target_path}")
-
-             try:
-                 tree = self.query_one(HideableDirectoryTree)
-                 tree.path = target_path # Set tree root to the target dir
-                 await tree.reload()
-                 # Optionally, select the directory node in the tree
-                 # await tree.select_node_by_path(target_path)
-             except Exception as e:
-                 self.query_one("#preview", Static).update(f"[red]Error navigating tree: {e}[/]")
-
         else:
-            self.query_one("#preview", Static).update(f"[red]Path not found: {path_str}[/]")
-
+            self.query_one("#preview", Static).update(f"[red]Path not found or not a file: {path_str}[/]")
 
 if __name__ == "__main__":
     FileExplorer().run()
