@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from pdfminer.high_level import extract_text
 from rich.console import RenderableType
 from rich.markdown import Markdown

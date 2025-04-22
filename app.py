@@ -1,5 +1,6 @@
 from pathlib import Path
 import threading
+import shutil
 
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
@@ -12,18 +13,15 @@ from rich.syntax import Syntax
 from tools.audio_player import AudioPlayer
 from tools.image_previewer import ImagePreviewer
 from tools.video_thumbnail import VideoThumbnailer
-from tools.pdf_previewer import PDFPreviewer            
+from tools.pdf_previewer import PDFPreviewer
 from tools.fuzzy_search import FuzzySearchScreen
 from utils import LANGUAGE_MAP, register_custom_themes
 from themes import *
 
-
 from widgets import HideableDirectoryTree
-from screens import RenameScreen, MoveScreen, DeleteConfirmScreen
+from screens import RenameScreen, MoveScreen, DeleteConfirmScreen, NewFolderScreen, CopyScreen
 
-
-DEFAULT_THEME = hacker_terminal # CHANGE THIS TO CHANGE DEFAULT THEME
-
+DEFAULT_THEME = deep_space
 
 class FileExplorer(App):
     CSS = """
@@ -32,6 +30,7 @@ class FileExplorer(App):
       border: round #666;
     }
 
+    /* Preview Panel Styling */
     #preview_panel {
       width: 70%;
       height: 100%;
@@ -40,8 +39,6 @@ class FileExplorer(App):
       layout: vertical;
       content-align: left top;
     }
-
-    /* action buttons stay at top */
     #preview_actions {
       padding-bottom: 1;
       content-align: center middle;
@@ -52,18 +49,13 @@ class FileExplorer(App):
       content-align: center middle;
       border: none;
     }
-
-    /* scrollable area under buttons */
     #preview_scroll {
       height: 90%;
       overflow-y: auto;
     }
-
-    /* the actual preview content */
     #preview {
       height: auto;
     }
-
     #confirm_actions {
       padding-top: 1;
       content-align: center middle;
@@ -74,18 +66,31 @@ class FileExplorer(App):
         "fuzzy_search":   FuzzySearchScreen,
         "rename":         RenameScreen,
         "move":           MoveScreen,
+        "copy":           CopyScreen,
         "confirm_delete": DeleteConfirmScreen,
+        "new_folder":     NewFolderScreen,
     }
 
     BINDINGS = [
-        ("/",       "push_search",   "Search Files"),
-        ("escape",  "reset_root",    "Go Home"),
-        ("h",       "toggle_hidden", "Show/Hide Hidden"),
-        ("p",       "play_audio",    "Play/Stop Audio"),
-        ("+",       "increase_size", "Increase Preview Size"),
-        ("-",       "decrease_size", "Decrease Preview Size"),
-        ("=",       "increase_size", "Increase Preview Size"),
-        ("_",       "decrease_size", "Decrease Preview Size"),
+        # Core Bindings
+        ("/",      "push_search",   "Search"),
+        ("escape", "reset_root",    "Go Home"),
+        ("delete", "delete",        "Delete"),
+        ("F",      "new_folder",    "New Folder"),
+        ("h",      "toggle_hidden", "Show/Hide Hidden"),
+        ("R",      "rename",        "Rename"),
+        ("M",      "move",          "Move To"),
+        ("C",      "copy",          "Copy To"),
+
+        # Preview Bindings
+        ("p",      "play_audio",    "Play/Stop Audio"),
+        ("+",      "increase_size", "Img Size"),
+        ("-",      "decrease_size", "Img Size"),
+
+        # Redundant Bindings
+        ("H",      "toggle_hidden", "Show/Hide Hidden"),
+        ("=",      "increase_size", "Img Size"),
+        ("_",      "decrease_size", "Img Size"),
     ]
 
     preview_width   = reactive(100, recompose=False, init=False)
@@ -98,20 +103,20 @@ class FileExplorer(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.current_file:   Path | None = None
+        self.current_dir:    Path        = Path.home()
         self.file_to_delete: Path | None = None
+
         self.player = AudioPlayer()
         self.previewer = ImagePreviewer(max_width=self.preview_width,
                                         max_height=self.preview_height)
         self.video_preview = VideoThumbnailer(max_width=self.preview_width,
                                               max_height=self.preview_height)
-        self.pdf_preview = PDFPreviewer(max_pages=1, max_chars=8000)  # PDF previewer
+        self.pdf_preview = PDFPreviewer(max_pages=1, max_chars=8000)
         self.last_played:   Path | None = None
         self.LANGUAGE_MAP = LANGUAGE_MAP
 
     def on_mount(self) -> None:
-        # register themes
         register_custom_themes(self)
-        # set default theme
         self.theme = DEFAULT_THEME.name
 
     def watch_preview_width(self, new_width: int) -> None:
@@ -201,19 +206,15 @@ class FileExplorer(App):
         yield Header(show_clock=True)
 
         with Horizontal():
-            # file tree
             yield HideableDirectoryTree(Path.home(), id="tree")
 
-            # preview panel
             with Vertical(id="preview_panel"):
-                # scrollable region below
                 with Vertical(id="preview_scroll"):
                     yield Static("Select a file to preview its contents", id="preview")
-
-                # buttons at top
                 with Horizontal(id="preview_actions"):
                     yield Button("Rename", id="rename_btn")
                     yield Button("Move",   id="move_btn")
+                    yield Button("Copy To", id="copy_btn")
                     yield Button("Delete", id="delete_btn")
 
         yield Footer()
@@ -223,10 +224,23 @@ class FileExplorer(App):
             await self.push_screen("rename")
         elif event.button.id == "move_btn":
             await self.push_screen("move")
+        elif event.button.id == "copy_btn":
+            await self.push_screen("copy")
         elif event.button.id == "delete_btn":
+            if self.current_file:
+                self.file_to_delete = self.current_file
+            else:
+                self.file_to_delete = self.current_dir
+            await self.push_screen("confirm_delete")
+
+
+    ## Delete File ##
+    async def action_delete(self) -> None:
+        if self.current_file:
             self.file_to_delete = self.current_file
-            if self.file_to_delete:
-                await self.push_screen("confirm_delete")
+        else:
+            self.file_to_delete = self.current_dir
+        await self.push_screen("confirm_delete")
 
     async def delete_file_confirmed(self) -> None:
         if not self.file_to_delete:
@@ -248,40 +262,146 @@ class FileExplorer(App):
         await tree.reload()
         preview.update("Deleted. Select a file to preview its contents.")
 
-    def on_directory_tree_file_selected(self, event: Button.Pressed) -> None:
-        self.current_file = Path(event.path)
+    ## Create Folder ##
+    async def action_new_folder(self) -> None:
+        await self.push_screen("new_folder")
+
+    async def create_folder(self, name: str) -> None:
+        parent = self.current_dir or Path.home()
+        new_path = parent / name
+        preview = self.query_one("#preview", Static)
+        try:
+            new_path.mkdir()
+        except Exception as e:
+            preview.update(f"[red]Failed to create folder {name}: {e}[/]")
+        else:
+            preview.update(f"[green]Created folder:[/] {new_path}")
+            tree = self.query_one("#tree", HideableDirectoryTree)
+            await tree.reload()
+
+    ## Rename File ##
+    async def action_rename(self) -> None:
+        await self.push_screen("rename")
+
+    async def rename_file(self, new_name: str) -> None:
+        """Rename the currently selected file to `new_name`."""
+        if not self.current_file:
+            return
+        old_path = self.current_file
+        new_path = old_path.with_name(new_name)
+        preview = self.query_one("#preview", Static)
+        try:
+            old_path.rename(new_path)
+        except Exception as e:
+            preview.update(f"[red]Rename failed: {e}[/]")
+            return
+
+        # Update state
+        self.current_file = new_path
+        self.current_dir  = new_path.parent
+
+        # Refresh the tree and preview pane
+        tree = self.query_one("#tree", HideableDirectoryTree)
+        await tree.reload()
         self._refresh_preview()
 
+
+    ## Move File ##
+    async def action_move(self) -> None:
+        await self.push_screen("move")
+
+    async def move_file(self, dest_str: str) -> None:
+        dest = Path(dest_str).expanduser()
+        preview = self.query_one("#preview", Static)
+        if not dest.is_dir():
+            preview.update(f"[red]Destination not a directory: {dest}[/]")
+            return
+        try:
+            shutil.move(str(self.current_file), str(dest / self.current_file.name))
+        except Exception as e:
+            preview.update(f"[red]Move failed: {e}[/]")
+            return
+        self.current_file = dest / self.current_file.name
+        self.current_dir  = dest
+        tree = self.query_one("#tree", HideableDirectoryTree)
+        await tree.reload()
+        self._refresh_preview()
+
+
+    ## Copy File ##
+    async def action_copy(self) -> None:
+        await self.push_screen("copy")
+
+    async def copy_file(self, dest_str: str) -> None:
+        preview = self.query_one("#preview", Static)
+
+        # Make sure a file is selected
+        if not self.current_file:
+            preview.update("[red]No file selected to copy.[/]")
+            return
+
+        # Resolve destination
+        dest = Path(dest_str).expanduser()
+        if not dest.is_dir():
+            preview.update(f"[red]Destination not a directory: {dest}[/]")
+            return
+
+        # Perform the copy
+        try:
+            shutil.copy2(str(self.current_file),
+                         str(dest / self.current_file.name))
+        except Exception as e:
+            preview.update(f"[red]Copy failed: {e}[/]")
+            return
+
+        # Reload the tree so you can immediately see the new file
+        tree = self.query_one("#tree", HideableDirectoryTree)
+        await tree.reload()
+        preview.update(f"[green]Copied to:[/] {dest / self.current_file.name}")
+
+
+    ## File Selected ##
+    def on_directory_tree_file_selected(self, event) -> None:
+        self.current_file = Path(event.path)
+        self.current_dir  = self.current_file.parent
+        self._refresh_preview()
+
+    ## Directory Selected ##
+    def on_directory_tree_directory_selected(self, event) -> None:
+        self.current_file = None
+        self.current_dir  = Path(event.path)
+        self.query_one("#preview", Static).update(f"[bold]Directory:[/] {self.current_dir}")
+
+    ## Reset Root ##
     async def action_reset_root(self) -> None:
         tree = self.query_one("#tree", HideableDirectoryTree)
         tree.path = Path.home()
+        await tree.reload()
         self.query_one("#preview", Static).update("Select a file to preview its contents")
         self.current_file = None
         self.last_played  = None
+        self.current_dir  = Path.home()
 
+    ## Toggle Hidden ##
     async def action_toggle_hidden(self) -> None:
         tree = self.query_one("#tree", HideableDirectoryTree)
         tree.show_hidden = not tree.show_hidden
         await tree.reload()
 
+    ## Jump to Path ##
     async def jump_to_path(self, path_str: str) -> None:
-        """Sets the current file path, navigates tree, and refreshes the preview."""
         target_path = Path(path_str)
         if target_path.is_file():
             self.current_file = target_path
+            self.current_dir  = target_path.parent
             self._refresh_preview()
-
-            # Navigate tree to the file's parent directory
             try:
                 tree = self.query_one(HideableDirectoryTree)
                 tree.path = target_path.parent
-                await tree.reload() # Need to await the reload
+                await tree.reload()
             except Exception as e:
-                # Log or display error if tree navigation fails
                 self.query_one("#preview", Static).update(f"[red]Error navigating tree: {e}[/]")
-
         else:
-            # Handle cases where the path is not a file or doesn't exist
             self.query_one("#preview", Static).update(f"[red]Path not found or not a file: {path_str}[/]")
 
 if __name__ == "__main__":

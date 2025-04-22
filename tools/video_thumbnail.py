@@ -1,7 +1,6 @@
 from pathlib import Path
 import subprocess
 import io
-
 from PIL import Image
 from rich_pixels import Pixels
 from rich.console import RenderableType
