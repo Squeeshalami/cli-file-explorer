@@ -22,7 +22,7 @@ from widgets import HideableDirectoryTree
 from screens import RenameScreen, MoveScreen, DeleteConfirmScreen
 
 
-DEFAULT_THEME = dark_matter # CHANGE THIS TO CHANGE DEFAULT THEME
+DEFAULT_THEME = hacker_terminal # CHANGE THIS TO CHANGE DEFAULT THEME
 
 
 class FileExplorer(App):
