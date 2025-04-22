@@ -203,7 +203,7 @@ class FileExplorer(App):
                 preview.update("No Preview Available")
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Header(show_clock=True, time_format="%I:%M %p", name="File Explorer" )
 
         with Horizontal():
             yield HideableDirectoryTree(Path.home(), id="tree")
