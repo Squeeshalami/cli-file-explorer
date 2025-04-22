@@ -78,10 +78,10 @@ class FileExplorer(App):
     }
 
     BINDINGS = [
-        ("p",       "play_audio",    "Play/Stop Audio"),
         ("/",       "push_search",   "Search Files"),
         ("escape",  "reset_root",    "Go Home"),
         ("h",       "toggle_hidden", "Show/Hide Hidden"),
+        ("p",       "play_audio",    "Play/Stop Audio"),
         ("+",       "increase_size", "Increase Preview Size"),
         ("-",       "decrease_size", "Decrease Preview Size"),
         ("=",       "increase_size", "Increase Preview Size"),
@@ -263,6 +263,26 @@ class FileExplorer(App):
         tree = self.query_one("#tree", HideableDirectoryTree)
         tree.show_hidden = not tree.show_hidden
         await tree.reload()
+
+    async def jump_to_path(self, path_str: str) -> None:
+        """Sets the current file path, navigates tree, and refreshes the preview."""
+        target_path = Path(path_str)
+        if target_path.is_file():
+            self.current_file = target_path
+            self._refresh_preview()
+
+            # Navigate tree to the file's parent directory
+            try:
+                tree = self.query_one(HideableDirectoryTree)
+                tree.path = target_path.parent
+                await tree.reload() # Need to await the reload
+            except Exception as e:
+                # Log or display error if tree navigation fails
+                self.query_one("#preview", Static).update(f"[red]Error navigating tree: {e}[/]")
+
+        else:
+            # Handle cases where the path is not a file or doesn't exist
+            self.query_one("#preview", Static).update(f"[red]Path not found or not a file: {path_str}[/]")
 
 if __name__ == "__main__":
     FileExplorer().run()

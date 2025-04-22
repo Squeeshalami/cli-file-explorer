@@ -55,4 +55,4 @@ class FuzzySearchScreen(Screen):
         selected = event.item.data
         await self.app.pop_screen()
         # <-- call the App's method directly
-        self.app.jump_to_path(selected)
+        await self.app.jump_to_path(selected)
