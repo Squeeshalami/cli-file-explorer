@@ -120,25 +120,6 @@ class FileExplorer(App):
         register_custom_themes(self)
         self.theme = DEFAULT_THEME.name
 
-    def on_directory_tree_node_highlighted(
-        self,
-        event: DirectoryTree.NodeHighlighted
-    ) -> None:
-        """Auto-refresh preview as user navigates the tree."""
-        raw = event.node.data or event.node.id
-        path = Path(raw)
-
-        if path.is_file():
-            self.current_file = path
-            self.current_dir  = path.parent
-            self._refresh_preview()
-        else:
-            self.current_file = None
-            self.current_dir  = path
-            self.query_one("#preview", Static).update(
-                f"[bold]Directory:[/] {path}"
-            )
-
     def watch_preview_width(self, new_width: int) -> None:
         self.previewer.max_width = new_width
         self.video_preview.max_width = new_width
