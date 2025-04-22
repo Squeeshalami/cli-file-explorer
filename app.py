@@ -21,7 +21,7 @@ from themes import *
 from widgets import HideableDirectoryTree
 from screens import RenameScreen, MoveScreen, DeleteConfirmScreen, NewFolderScreen, CopyScreen
 
-DEFAULT_THEME = deep_space
+DEFAULT_THEME = ember
 
 class FileExplorer(App):
     CSS = """
