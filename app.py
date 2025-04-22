@@ -415,5 +415,6 @@ class FileExplorer(App):
         else:
             self.query_one("#preview", Static).update(f"[red]Path not found or not a file: {path_str}[/]")
 
+
 if __name__ == "__main__":
     FileExplorer().run()
