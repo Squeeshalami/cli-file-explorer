@@ -7,9 +7,7 @@ from rich.console import RenderableType
 
 class VideoThumbnailer:
     """
-    Extract the first frame of a video and render it as:
-     - a rich_pixels.Renderable (rich_preview)
-     - an ASCII‐art string (ascii_preview)
+    Extract the first frame of a video and render it
     """
 
     def __init__(self,

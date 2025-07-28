@@ -11,18 +11,10 @@ class PDFPreviewer:
     """
 
     def __init__(self, max_pages: int = 2, max_chars: int = 5000):
-        """
-        :param max_pages: how many pages to pull (default 1)
-        :param max_chars: truncate the extracted text to this length
-        """
         self.max_pages = max_pages
         self.max_chars = max_chars
 
     def rich_preview(self, file_path: str) -> RenderableType:
-        """
-        Returns a rich.markdown.Markdown object for the first page,
-        truncated to max_chars.
-        """
         text = self._extract_text(file_path)
         snippet = text[: self.max_chars]
         # wrap in a markdown code block (so PDF text shows in a scrollable block)
@@ -30,9 +22,6 @@ class PDFPreviewer:
         return md
 
     def text_preview(self, file_path: str) -> str:
-        """
-        Returns plain text (first page only), truncated.
-        """
         text = self._extract_text(file_path)
         return text[: self.max_chars]
 

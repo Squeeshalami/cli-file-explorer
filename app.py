@@ -15,6 +15,7 @@ from tools.audio_player import AudioPlayer
 from tools.image_previewer import ImagePreviewer
 from tools.video_thumbnail import VideoThumbnailer
 from tools.pdf_previewer import PDFPreviewer
+from tools.svg_previewer import SVGPreviewer
 from tools.fuzzy_search import FuzzySearchScreen
 from utils import LANGUAGE_MAP, register_custom_themes
 from themes import *
@@ -113,6 +114,8 @@ class FileExplorer(App):
         self.video_preview = VideoThumbnailer(max_width=self.preview_width,
                                               max_height=self.preview_height)
         self.pdf_preview = PDFPreviewer(max_pages=1, max_chars=8000)
+        self.svg_preview = SVGPreviewer(max_width=self.preview_width,
+                                         max_height=self.preview_height)
         self.last_played:   Path | None = None
         self.LANGUAGE_MAP = LANGUAGE_MAP
 
@@ -123,11 +126,13 @@ class FileExplorer(App):
     def watch_preview_width(self, new_width: int) -> None:
         self.previewer.max_width = new_width
         self.video_preview.max_width = new_width
+        self.svg_preview.max_width = new_width
         self._refresh_preview()
 
     def watch_preview_height(self, new_height: int) -> None:
         self.previewer.max_height = new_height
         self.video_preview.max_height = new_height
+        self.svg_preview.max_height = new_height
         self._refresh_preview()
 
     def action_increase_size(self) -> None:
@@ -187,6 +192,12 @@ class FileExplorer(App):
                 preview.update(self.pdf_preview.rich_preview(str(self.current_file)))
             except:
                 preview.update(self.pdf_preview.text_preview(str(self.current_file)))
+
+        elif ext == '.svg':
+            try:
+                preview.update(self.svg_preview.rich_preview(str(self.current_file)))
+            except:
+                preview.update(self.svg_preview.ascii_preview(str(self.current_file)))
 
         elif ext in self.LANGUAGE_MAP:
             try:
@@ -251,7 +262,8 @@ class FileExplorer(App):
             if path.is_file():
                 path.unlink()
             elif path.is_dir():
-                path.rmdir()
+                # Use rmtree to handle non-empty directories
+                shutil.rmtree(path)
         except Exception as e:
             preview.update(Text(f"Failed to delete {path.name}: {e}", style="red"))
             return
@@ -284,10 +296,13 @@ class FileExplorer(App):
         await self.push_screen("rename")
 
     async def rename_file(self, new_name: str) -> None:
-        """Rename the currently selected file to `new_name`."""
-        if not self.current_file:
+        """Rename the currently selected file or directory to `new_name`."""
+        # Use current_file if a file is selected, otherwise use current_dir for directory
+        target_path = self.current_file if self.current_file else self.current_dir
+        if not target_path:
             return
-        old_path = self.current_file
+            
+        old_path = target_path
         new_path = old_path.with_name(new_name)
         preview = self.query_one("#preview", Static)
         try:
@@ -296,32 +311,57 @@ class FileExplorer(App):
             preview.update(f"[red]Rename failed: {e}[/]")
             return
 
-        self.current_file = new_path
-        self.current_dir  = new_path.parent
+        # Update the current references
+        if self.current_file:  # Was a file
+            self.current_file = new_path
+            self.current_dir = new_path.parent
+        else:  # Was a directory
+            self.current_dir = new_path
+            
         tree = self.query_one("#tree", HideableDirectoryTree)
         await tree.reload()
-        self._refresh_preview()
+        
+        if self.current_file:
+            self._refresh_preview()
+        else:
+            preview.update(f"[bold]Directory:[/] {self.current_dir}")
 
     ## Move File ##
     async def action_move(self) -> None:
         await self.push_screen("move")
 
     async def move_file(self, dest_str: str) -> None:
+        # Use current_file if a file is selected, otherwise use current_dir for directory
+        source_path = self.current_file if self.current_file else self.current_dir
+        if not source_path:
+            return
+            
         dest = Path(dest_str).expanduser()
         preview = self.query_one("#preview", Static)
         if not dest.is_dir():
             preview.update(f"[red]Destination not a directory: {dest}[/]")
             return
         try:
-            shutil.move(str(self.current_file), str(dest / self.current_file.name))
+            new_path = dest / source_path.name
+            shutil.move(str(source_path), str(new_path))
         except Exception as e:
             preview.update(f"[red]Move failed: {e}[/]")
             return
-        self.current_file = dest / self.current_file.name
-        self.current_dir  = dest
+            
+        # Update the current references  
+        if self.current_file:  # Was a file
+            self.current_file = new_path
+            self.current_dir = dest
+        else:  # Was a directory
+            self.current_dir = new_path
+            
         tree = self.query_one("#tree", HideableDirectoryTree)
         await tree.reload()
-        self._refresh_preview()
+        
+        if self.current_file:
+            self._refresh_preview()
+        else:
+            preview.update(f"[bold]Directory:[/] {self.current_dir}")
 
     ## Copy File ##
     async def action_copy(self) -> None:
@@ -330,22 +370,28 @@ class FileExplorer(App):
     async def copy_file(self, dest_str: str) -> None:
         preview = self.query_one("#preview", Static)
 
-        if not self.current_file:
-            preview.update("[red]No file selected to copy.[/]")
+        # Use current_file if a file is selected, otherwise use current_dir for directory
+        source_path = self.current_file if self.current_file else self.current_dir
+        if not source_path:
+            preview.update("[red]No file or directory selected to copy.[/]")
             return
 
-        dest_path = Path(dest_str)
+        dest_path = Path(dest_str).expanduser()
+        
+        # If it's not an absolute path, make it relative to the parent of the source
         if not dest_path.is_absolute():
-            dest_path = self.current_dir / dest_path
-        dest = dest_path.expanduser()
+            dest_path = source_path.parent / dest_path
 
-        if not dest.exists() or not dest.is_dir():
-            preview.update(f"[red]Destination not a directory: {dest}[/]")
+        if not dest_path.exists() or not dest_path.is_dir():
+            preview.update(f"[red]Destination not a directory: {dest_path}[/]")
             return
 
-        new_path = dest / self.current_file.name
+        new_path = dest_path / source_path.name
         try:
-            shutil.copy2(str(self.current_file), str(new_path))
+            if source_path.is_file():
+                shutil.copy2(str(source_path), str(new_path))
+            elif source_path.is_dir():
+                shutil.copytree(str(source_path), str(new_path))
         except Exception as e:
             preview.update(f"[red]Copy failed: {e}[/]")
             return

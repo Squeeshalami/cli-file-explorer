@@ -10,16 +10,18 @@ class RenameScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static("✏️  Rename File", classes="header")
-        yield Input(placeholder="New filename", id="new_name")
+        yield Static("✏️  Rename", classes="header")
+        yield Input(placeholder="New name", id="new_name")
         yield Button("Rename", id="do_rename")
 
     def on_show(self) -> None:
-        """Populate the input with the current filename when the screen is shown."""
+        """Populate the input with the current filename or directory name when the screen is shown."""
         new_name_input = self.query_one("#new_name", Input)
-        if self.app.current_file:
-            # strip off any path, just the filename
-            new_name_input.value = self.app.current_file.name
+        # Use current_file if a file is selected, otherwise use current_dir for directory
+        target = self.app.current_file if self.app.current_file else self.app.current_dir
+        if target:
+            # strip off any path, just the filename/directory name
+            new_name_input.value = target.name
         new_name_input.focus()
 
     async def on_button_pressed(self, event: Button.Pressed):
@@ -36,7 +38,7 @@ class MoveScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static("📂  Move File", classes="header")
+        yield Static("📂  Move", classes="header")
         yield Input(placeholder="Destination folder", id="dest_folder")
         yield Button("Move", id="do_move")
 
@@ -54,7 +56,7 @@ class CopyScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static("📋  Copy File", classes="header")
+        yield Static("📋  Copy", classes="header")
         yield Input(placeholder="Destination folder", id="dest_folder")
         yield Button("Copy", id="do_copy")
 
@@ -69,10 +71,11 @@ class DeleteConfirmScreen(Screen):
     BINDINGS = [("escape", "app.pop_screen", "Cancel")]
 
     def compose(self) -> ComposeResult:
-        file = self.app.file_to_delete
-        name = file.name if file else ""
+        file_or_dir = self.app.file_to_delete
+        name = file_or_dir.name if file_or_dir else ""
+        item_type = "directory" if file_or_dir and file_or_dir.is_dir() else "file"
         yield Static("⚠️  Confirm Delete", classes="header")
-        yield Static(f"Delete {name}?", id="file_name")
+        yield Static(f"Delete {item_type} '{name}'?", id="file_name")
         with Horizontal(id="confirm_actions"):
             yield Button("Yes", id="confirm_yes")
             yield Button("No",  id="confirm_no")
